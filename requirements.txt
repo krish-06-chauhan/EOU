@@ -1,0 +1,11 @@
+# Core dependencies for the basic voice/text simulation
+pyaudio==0.2.14
+SpeechRecognition==3.10.4
+python-dotenv==1.0.1
+openai>=1.0.0
+
+# Multimodal model inference requirements
+onnxruntime
+transformers
+torch
+numpy
