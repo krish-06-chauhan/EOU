@@ -48,6 +48,13 @@ OPENAI_API_KEY=your_actual_openai_api_key_here
 
 # 2. Relative or absolute path to your trained ONNX model file (.onnx)
 LOCAL_SMART_TURN_MODEL_PATH=model/model_int8_static_calib64.onnx
+
+# 3. Sensitivity Threshold (Default: 0.30 works well for both Hindi & English)
+# Adjust based on language preference (0.20-0.50):
+# - 0.30: Recommended optimal value for Hindi & English (triggers complete thoughts, holds pauses)
+# - 0.20: Faster response time for short phrases
+# - 0.50: Conservative holding for slow speakers
+SMART_TURN_THRESHOLD=0.30
 ```
 
 > 💡 **Note on Model File**: Always use the **`.onnx`** file (e.g. `model/model_int8_static_calib64.onnx`), **NOT** the `.safetensors` file.
