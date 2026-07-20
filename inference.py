@@ -7,19 +7,21 @@ from dotenv import load_dotenv
 
 from audio_utils import truncate_audio_to_last_n_seconds
 
-# Load environment variables from .env
-load_dotenv()
+base_dir = os.path.dirname(os.path.abspath(__file__))
+# Load environment variables from .env in Basic_Flow directory
+load_dotenv(dotenv_path=os.path.join(base_dir, ".env"))
+env_path = os.environ.get("LOCAL_SMART_TURN_MODEL_PATH", "model/model_int8_static_calib64.onnx")
 
-ONNX_MODEL_PATH = os.environ.get("LOCAL_SMART_TURN_MODEL_PATH")
-if not ONNX_MODEL_PATH:
-    # Dynamically find the model in the workspace output/ folder if env is empty
-    local_models = glob.glob("e:/Krish/livekit_NilkanthBhai/output/local_smart_turn_multimodal/**/model_int8_static_calib64.onnx", recursive=True)
-    if not local_models:
-        local_models = glob.glob("e:/Krish/livekit_NilkanthBhai/output/**/model_int8_static_calib64.onnx", recursive=True)
-    if local_models:
-        ONNX_MODEL_PATH = local_models[0]
-    else:
-        ONNX_MODEL_PATH = "model_int8_static_calib64.onnx"
+if os.path.isabs(env_path):
+    ONNX_MODEL_PATH = env_path
+else:
+    ONNX_MODEL_PATH = os.path.abspath(os.path.join(base_dir, env_path))
+
+if not os.path.exists(ONNX_MODEL_PATH):
+    raise FileNotFoundError(
+        f"ONNX model file not found at: '{ONNX_MODEL_PATH}'. "
+        "Please configure LOCAL_SMART_TURN_MODEL_PATH in .env or place your .onnx model in the Basic_Flow/model/ folder."
+    )
 
 print(f"[SmartTurn] Loading ONNX model from: {ONNX_MODEL_PATH}")
 

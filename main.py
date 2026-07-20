@@ -11,11 +11,60 @@ from inference import predict_endpoint
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
-# Load keys
-load_dotenv()
+base_dir = os.path.dirname(os.path.abspath(__file__))
+# Load keys explicitly from local .env
+load_dotenv(dotenv_path=os.path.join(base_dir, ".env"))
 
 openai_api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=openai_api_key) if openai_api_key else None
+
+
+def merge_transcript(existing_buffer: str, new_chunk: str) -> str:
+    """
+    Robustly merges a new STT chunk into the existing transcript buffer,
+    eliminating STT duplicate loops while preserving new words and protecting against data loss.
+    """
+    existing_clean = existing_buffer.strip()
+    new_clean = new_chunk.strip()
+
+    if not existing_clean:
+        return new_clean
+    if not new_clean or new_clean == existing_clean:
+        return existing_clean
+
+    words_existing = existing_clean.split()
+    words_new = new_clean.split()
+
+    # Case A: new_chunk completely subsumes or extends existing_buffer from the start
+    if new_clean.startswith(existing_clean):
+        return new_clean
+
+    # Case B: existing_buffer already ends with new_chunk
+    if existing_clean.endswith(new_clean):
+        return existing_clean
+
+    # Case C: Find maximum overlapping suffix of existing_buffer matching a prefix of new_chunk
+    max_possible_overlap = min(len(words_existing), len(words_new))
+    best_overlap_k = 0
+
+    for k in range(max_possible_overlap, 0, -1):
+        if words_existing[-k:] == words_new[:k]:
+            best_overlap_k = k
+            break
+
+    if best_overlap_k > 0:
+        new_words = words_new[best_overlap_k:]
+        merged = " ".join(words_existing + new_words)
+    else:
+        if new_clean in existing_clean:
+            return existing_clean
+        merged = f"{existing_clean} {new_clean}"
+
+    # Invariant: Never allow buffer to shrink
+    if len(merged.split()) < len(words_existing):
+        return existing_clean
+
+    return merged
 
 
 def get_llm_response(prompt_text):
@@ -88,11 +137,8 @@ def run_basic_flow():
             print(f"STT Error: {e}")
             break
 
-        # Accumulate transcript text
-        if buffer_transcript:
-            buffer_transcript += " " + chunk_text
-        else:
-            buffer_transcript = chunk_text
+        # Merge transcript text cleanly using suffix/prefix overlap matching
+        buffer_transcript = merge_transcript(buffer_transcript, chunk_text)
 
         print(f"➔ [Current Transcript Buffer]: \"{buffer_transcript}\"")
 
@@ -102,15 +148,16 @@ def run_basic_flow():
         audio_f32 = int16_samples.astype(np.float32) / 32768.0
 
         # Run ONNX Model Evaluation
-        print("🧠 Evaluating turn completion with ONNX model...")
+        threshold = float(os.getenv("SMART_TURN_THRESHOLD", "0.50"))
+        print(f"🧠 Evaluating turn completion with ONNX model (Threshold = {threshold:.2f})...")
         res = predict_endpoint(
             audio_array=audio_f32,
             silence_duration=SILENCE_TIMEOUT,
             trailing_text=buffer_transcript
         )
         
-        is_complete = res["prediction"] == 1
         probability = res["probability"]
+        is_complete = probability >= threshold
 
         if is_complete:
             print(f"🟩 [ONNX DECISION]: COMPLETE (p={probability:.4f}) -> Triggering LLM...")
